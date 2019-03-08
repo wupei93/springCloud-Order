@@ -10,19 +10,19 @@ spring:
   application:
     name: 'config'
   rabbitmq:
-    host: 123.207.231.196
+    host: localhost
     port: 5672
-    username: cs
-    password: 123456
+    username: guest
+    password: guest
   cloud:
     config:
       server:
         git:
-          uri: 'https://git.oschina.net/believecs/SpringcloudConfig'
+          uri: 'https://gitee.com/wupeigit/SpringcloudConfig'
         #  uri: 'https://github.com/FurionCS/SpringcloudConfig'
           search-paths: 'shop'
-        #   password: '##@'
-        #  username: '###'
+          password: '2HXXcLLMum5YVjH'
+          username: 'wupeigit'
       label: master
 encrypt:
  # key: '*&3loa#@9no_0*(!'

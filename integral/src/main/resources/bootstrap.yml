@@ -1,5 +1,5 @@
 server:
-  port: 8896
+  port: 8897
 spring:
   application:
     name: 'integral'
