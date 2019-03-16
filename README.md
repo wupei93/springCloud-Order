@@ -2,10 +2,8 @@
 # Spring cloud shop
 
 
-      本系统参考[spring-cloud-rest-tcc](https://github.com/FurionCS/spring-cloud-rest-tcc) 项目进行学习
-    Spring Cloud为开发者提供了快速构建分布式系统中的一些常见工具, 如分布式配置中心, 服务发现与注册中心, 
-    智能路由, 服务熔断及降级, 消息总线, 分布式追踪的解决方案等.本次实战以模拟下单流程为背景,采用分布式
-    事务中的Try-Confirm-Cancel即TCC模式作为实战演示.
+      本系统参考https://github.com/FurionCS/springCloudShop项目进行学习，添加了很多新技术对系统进行了完善
+
    
 ## 开发环境
 -  MySQL 5.7.17
@@ -18,6 +16,7 @@
 
 ## 项目结构
 
+#### Spring cloud微服务
 | 模块名称|     作用|   备注|
 | :-------- | --------:| :------: |
 | admin|   spring-boot-admin,用于监控| 
@@ -31,10 +30,62 @@
 |user|用户模块|
 |tcc|tcc事务模块|
 |integral|用户积分模块|接受各种事件，进行积分变化
+#### 消息中间件
+RabbitMQ、Redis
+#### 缓存
+Redis
 
+# 技术点
+## 新增：
+   
+1、zuul过滤器中进行流量限制（guava RateLimiter基于令牌桶算法限流）
+
+2、redis分布式session，既能保证集群（同一个服务的不同实例）都能获取到用户信息，又实现了单点登录
+（不同服务都能通过token查找redis缓存以获取到用户信息，所以所有子系统都能获取用户的登录状态）：
+ ```
+    具体实现方式为，用户登录后以token作为key，以用户信息作为value，将其存入redis中作为分布式session，
+    将token写入cookie中返回前端，后续请求时服务端只需根据cookie中的token到redis中查找用户信息即可；
+    此外本项目还利用HandlerMethodArgumentResolver的实现类完成请求接口中User参数的自动注入
+```
+3、原本使用rabbitMQ的方法服务降级后使用redis实现的异步消息队列（redis list + guava事件驱动编程实现）：
+```
+    redis实现异步消息队列的方案：
+    由于可靠性差，这里没有采用publish/subscribe中天然的异步通信模式，而是采用list结构，具体方案；
+    发送方使用lpush发布消息，接收方启动一个线程专门监听消息（使用brpop),收到消息后将其转换为事件，
+    使用guava EventBus将事件发送出去，具体的业务方法监听到事件后就会被调用
+```
+
+4、redis分布式锁（带守护线程）
+```
+    redis实现分布式锁的原理：
+    首先指定一个key，对其setnx，如果设置成功则表示获取到了锁，如果设置失败则
+    表示其他线程占有该锁，处理完业务逻辑后删除该key则表示释放了锁。
+    需要注意的点：
+    0、获取一个唯一标识（比如uuid），作为该key在redis中的value，后续每一步对key的操作都需判断value是否
+    一致，以防止线程在使用锁的时候被其他线程误操作该锁（比如删除）
+    1、不管线程获取锁有没有成功都要给该锁设置一个过期时间，以防止获取到锁的服务器还未来的及设置过期时间
+    就挂掉了导致锁无法释放。
+    2、拿到锁后需另起一个线程给锁续命（隔一段时间检查一次锁是否释放，如果没释放则表示业务逻辑未执行完，
+    刷新过期时间），如果获取到锁的服务器挂了，则该守护线程也会一起挂掉，最终锁会过期顺利释放
+    3、使用完一定要释放锁
+```
+5、使用布隆过滤器（guava BloomFilter） + 保存空结果的方法防止缓存穿透
+```
+    由于BloomFilter中的值只能添加不能删除，所以随着数据库中数据的变化，BloomFilter不能完全保证对无用访问
+    进行拦截，因此需要使用保存空结果的方法进行补足，此外还需设置定时任务重新生成BloomFilter防止其失去作用
+```
+6、使用分布式锁防止缓存击穿
+## 原有
+7、tcc分布式事务
+
+8、事件驱动编程（guava、rabbitMQ等多种实现方式）
+
+9、jwt+spring security 实现权限校验，在zuul filter中统一鉴权
+
+10、其他spring cloud提供的通用功能
 
 ## 启动方式
-为了保证开箱即用，我们将config 的需要加载的配置文件放入码云，https://git.oschina.net/believecs/SpringcloudConfig
+为了保证开箱即用，我们将config 的需要加载的配置文件放入码云，https://gitee.com/wupeigit/SpringcloudConfig
 fork一份到自己的码云。
 1：先准备环境，启动mysql,rabbitmq,redis,mongodb,准备带有jce的java环境（加密需要用到），本地系统host加上
 ```
@@ -86,101 +137,4 @@ RESTful TCC模式分3个阶段执行
 ### apiGateWay模块
 该模块主要是用于路由，授权，鉴权
 
-**需要的包**
-```groovy
-		<!-- 权限-->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-security</artifactId>
-		</dependency>
-		<!--jwt包 -->
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt</artifactId>
-			<version>0.7.0</version>
-		</dependency>
-```
 
-**登入后token生成过滤器**
-
-```java
-/**
- *
- * @Description 登入过滤器
- * 登录后获得登录信息，生成token
- * @Author ErnestCheng
- * @Date 2017/6/26.
- */
-public class LoginFilter extends ZuulFilter {
-
-    private static final Logger logger= Logger.getLogger(LoginFilter.class);
-
-    private JsonWebTokenUtility tokenService = new JsonWebTokenUtility();
-
-    @Override
-    public String filterType() {
-	    //表示请求后执行这个过滤器，pre(请求前),error(错误),post(请求后),route(请求中)
-        return "post";
-    }
-
-    @Override
-    public int filterOrder() {
-        return 10;
-    }
-
-    @Override
-    public boolean shouldFilter() {
-        return true;
-    }
-
-    @Override
-    public Object run() {
-        RequestContext ctx = RequestContext.getCurrentContext();
-        final String requestURI = ctx.getRequest().getRequestURI();
-        logger.info("requesteUrl:"+requestURI);
-        if(requestURI.contains("/user/login")){
-            final InputStream responseDataStream = ctx.getResponseDataStream();
-            final String responseData;
-            try {
-                responseData = CharStreams.toString(new InputStreamReader(responseDataStream,"UTF-8"));
-                ctx.setResponseBody(responseData);
-                Map<String,Object> value = JSONObject.parseObject(responseData,Map.class);
-                if(value!=null&&value.get("data")!=null){
-                    Map<String,Object> data=JSONObject.parseObject(value.get("data").toString());
-                    AuthTokenDetails authTokenDetails = new AuthTokenDetails();
-                    authTokenDetails.setId(Long.valueOf(data.get("userId").toString()));
-                    authTokenDetails.setUsername(data.get("userName").toString());
-                    authTokenDetails.setExpirationDate(buildExpirationDate());
-                    JSONArray jsonArray =JSONObject.parseArray(data.get("roles").toString());
-                    List<String> roleNameList= jsonArray.stream().map(json->{
-                        Map<String,String> map=JSONObject.parseObject(json.toString(),Map.class);
-                        return map.get("roleName").toString();
-                    }).collect(Collectors.toList());
-                    authTokenDetails.setRoleNames(roleNameList);
-                    String jwt=tokenService.createJsonWebToken(authTokenDetails);
-                    if(jwt!=null){
-                        AuthTokenVO authTokenVO=new AuthTokenVO();
-                        authTokenVO.setToken(jwt);
-                        authTokenVO.setUserId(Long.valueOf(data.get("userId").toString()));
-                        ctx.setResponseBody(JSON.toJSON(authTokenVO).toString());
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        return null;
-    }
-    /**
-     * 设定过期时间
-     * @return
-     */
-    private Date buildExpirationDate() {
-        Calendar calendar = Calendar.getInstance();
-        calendar.add(Calendar.HOUR_OF_DAY, 1);
-        return calendar.getTime();
-    }
-}
-
-
-```
