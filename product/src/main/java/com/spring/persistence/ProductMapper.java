@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * @Description 产品Mapper
@@ -25,6 +26,12 @@ public interface ProductMapper {
      * @return
      */
     Product getProductById(@Param("productId") Integer productId);
+
+    /**
+     * 获得所有产品
+     * @return
+     */
+    List<Product> queryProductList();
     /**
      * 更新产品库存
      * @param productId

@@ -13,10 +13,13 @@ import com.spring.service.UserService;
 import io.swagger.annotations.ApiOperation;
 import org.apache.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 import java.beans.IntrospectionException;
 import java.lang.reflect.InvocationTargetException;
@@ -24,6 +27,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @Description 用户Controller
@@ -35,16 +40,22 @@ import java.util.Objects;
 public class UserController {
 
     private static final Logger logger = Logger.getLogger(UserController.class);
+    /**
+     * 默认两天
+     */
+    public static final int TOKEN_EXPIRE = 3600*24 *2;
 
     @Autowired
     private UserService userService;
 
     @Autowired
+    private RedisTemplate redisTemplate;
+    @Autowired
     private UserLoginPublisher userLoginPublisher;
 
     @ApiOperation("用户登入")
     @PostMapping(value = "/login")
-    public ObjectDataResponse login(@Validated @RequestBody UserRequest userRequest, BindingResult result) {
+    public ObjectDataResponse login(@Validated @RequestBody UserRequest userRequest, HttpServletResponse response) {
         final String userName = userRequest.getUserName();
         final String password = userRequest.getPassword();
         User user = userService.getUserByName(userName);
@@ -54,6 +65,13 @@ public class UserController {
                 UserRoleVO userRoleVO = userService.listUserRoleVO(user.getId());
                 // 发送用户登录事件
                 userLoginPublisher.sendUserLoginEvent("login",user.getId(),"用户登录");
+                //设置token
+                String token = UUID.randomUUID().toString();
+                redisTemplate.opsForValue().set("Token:" + token, user, 30, TimeUnit.MINUTES);
+                Cookie cookie = new Cookie("Token", token);
+                cookie.setMaxAge(TOKEN_EXPIRE);
+                cookie.setPath("/");
+                response.addCookie(cookie);
                 return new ObjectDataResponse(userRoleVO);
             } else {
                 throw new GlobalException("用户密码不正确");

@@ -11,6 +11,7 @@ import com.spring.service.OrderService;
 import com.spring.web.client.UserClient;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,10 +24,13 @@ import java.util.List;
  * @Date 2017/5/31.
  */
 @RestController
+@RequestMapping("/order")
 public class OrderController {
 
     @Autowired
     private OrderService orderService;
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     @Autowired
     private UserClient userClient;
@@ -35,6 +39,12 @@ public class OrderController {
     @RequestMapping(value="getUserById",method = RequestMethod.POST)
     public ObjectDataResponse<User> getUserById(Integer userId){
             return userClient.getUserById(userId);
+    }
+
+    @ApiOperation(value="通过分布式session获取用户信息")
+    @RequestMapping(value="getUser",method = RequestMethod.POST)
+    public ObjectDataResponse getUser(User user){
+        return ObjectDataResponse.builder().data(user).build();
     }
 
     @ApiOperation(value="获得所有订单列表")

@@ -1,11 +1,14 @@
 package com.spring.listener;
 
 import com.alibaba.fastjson.JSON;
+import com.google.common.eventbus.Subscribe;
 import com.rabbitmq.client.Channel;
 import com.spring.common.model.util.tools.JavaScriptEngine;
+import com.spring.domain.config.RabbitBeanConfig;
 import com.spring.domain.event.UserLoginEvent;
 import com.spring.domain.model.IntegralChange;
 import com.spring.domain.model.UserIntegralDetail;
+import com.spring.publisher.UserLoginPublisher;
 import com.spring.repository.IntegralListenerRepository;
 import com.spring.service.IntegralChangeService;
 import com.spring.service.UserIntegralDetailService;
@@ -17,6 +20,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListeners;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -30,7 +34,7 @@ import java.util.UUID;
  * @author ErnestCheng
  */
 @Component
-@RabbitListeners(@RabbitListener(queues = "Q_User_login_Integral"))
+@RabbitListeners(@RabbitListener(queues = RabbitBeanConfig.USER_LOGIN_Q))
 public class UserLoginListener {
 
     private static final Logger LOGGER= Logger.getLogger(UserLoginListener.class);
@@ -44,13 +48,42 @@ public class UserLoginListener {
     @Autowired
     private IntegralListenerRepository integralListenerRepository;
 
+    @Autowired
+    private UserLoginPublisher userLoginPublisher;
 
+    @PostConstruct
+    public void init(){
+        userLoginPublisher.register(this);
+    }
+
+    /**
+     * 从redis中获取的消息
+     */
+    @Subscribe
+    public void listenEvent(UserLoginEvent userLoginEvent){
+        handleLoginEvent(userLoginEvent);
+    }
+
+    /**
+     * 从RabbitMq中获取的消息
+     */
     @RabbitHandler
-    public  void process(Object message,Channel channel) throws IOException {
-        // 处理message
-        Message messageMq=(Message)message;
-        String body=new String(messageMq.getBody());
-        UserLoginEvent userLoginEvent =this.checkMessageAndChange(body);
+    public void process(Object message,Channel channel) throws IOException {
+        Message messageMq = null;
+        try{
+            messageMq=(Message)message;
+            String body=new String(messageMq.getBody());
+            UserLoginEvent userLoginEvent =this.checkMessageAndChange(body);
+            handleLoginEvent(userLoginEvent);
+            //确认消息处理 ack
+            channel.basicAck(messageMq.getMessageProperties().getDeliveryTag(),false);
+        }catch (Exception e){
+            channel.basicNack(messageMq.getMessageProperties().getDeliveryTag(), false,false);
+            throw e;
+        }
+    }
+
+    private void handleLoginEvent(UserLoginEvent userLoginEvent){
         if(Objects.nonNull(userLoginEvent)){
             //处理用户积分详情
             IntegralChange integralChange=integralChangeService.getIntegralChangeByCode(userLoginEvent.getCode());
@@ -60,10 +93,6 @@ public class UserLoginListener {
             }else{
                 handlerErrorMessage(userLoginEvent);
             }
-            //确认消息处理 ack
-            channel.basicAck(messageMq.getMessageProperties().getDeliveryTag(),false);
-        }else{
-            channel.basicAck(messageMq.getMessageProperties().getDeliveryTag(),false);
         }
     }
 

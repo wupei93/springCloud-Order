@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -61,7 +62,7 @@ public class OrderServiceImpl implements OrderService{
 
     @Override
     @Transactional(propagation = Propagation.REQUIRED,rollbackFor = RuntimeException.class)
-    public ObjectDataResponse<Order> placeOrder(PlaceOrderRequest request){
+    public ObjectDataResponse<Order> placeOrder(@NotNull  PlaceOrderRequest request){
         //参数检查，使用preconditions进行快速失败
         Preconditions.checkNotNull(request);
         final Integer userId= Preconditions.checkNotNull(request.getUserId());

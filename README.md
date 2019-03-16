@@ -7,7 +7,6 @@
     智能路由, 服务熔断及降级, 消息总线, 分布式追踪的解决方案等.本次实战以模拟下单流程为背景,采用分布式
     事务中的Try-Confirm-Cancel即TCC模式作为实战演示.
    
-> dubbo 版本　https://github.com/FurionCS/dubbo-shop
 ## 开发环境
 -  MySQL 5.7.17
 -  RabbitMQ 3.6.6

@@ -26,6 +26,10 @@
         from t_product
         where id=#{productId,jdbcType=INTEGER}
     </select>
+    <select id="queryProductList" resultMap="BaseResultMap">
+        select <include refid="base_column"/>
+        from t_product
+    </select>
 
     <update id="updateProductStock">
         update t_product

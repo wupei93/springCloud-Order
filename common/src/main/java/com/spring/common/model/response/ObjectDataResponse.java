@@ -2,6 +2,7 @@ package com.spring.common.model.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.spring.common.model.StatusCode;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -15,6 +16,7 @@ import java.util.Objects;
 @EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@Builder
 public class ObjectDataResponse<T> extends RestfulResponse {
     private T data;
     public ObjectDataResponse(StatusCode code, String message){
